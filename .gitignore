@@ -13,3 +13,5 @@ contracts/target
 contracts/test_snapshots
 *.wasm
 .vercel
+tsconfig.tsbuildinfo
+tsconfig.tsbuildinfo
