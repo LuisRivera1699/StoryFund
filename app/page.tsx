@@ -12,14 +12,13 @@ export default function LandingPage() {
 
   const cta = async () => {
     if (!connected) {
-      if (!freighterInstalled) {
-        window.open("https://www.freighter.app/", "_blank");
-        return;
-      }
       try {
         await connect();
         router.push("/dashboard");
       } catch {
+        if (!freighterInstalled) {
+          window.open("https://www.freighter.app/", "_blank");
+        }
         // error surfaced in wallet button
       }
       return;
@@ -50,7 +49,7 @@ export default function LandingPage() {
           </p>
           <div className="animate-fade-up mt-8 flex flex-wrap gap-3 [animation-delay:260ms]">
             <Button size="lg" onClick={() => void cta()} disabled={connecting}>
-              {connected ? "Open dashboard" : freighterInstalled ? "Connect Freighter" : "Install Freighter"}
+              {connected ? "Open dashboard" : connecting ? "Connecting…" : "Connect Freighter"}
               <ArrowRight className="h-4 w-4" />
             </Button>
             <Link

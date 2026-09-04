@@ -1,13 +1,25 @@
 "use client";
 
 import * as StellarSdk from "@stellar/stellar-sdk";
-import { stellarConfig } from "@/config/stellar";
+import { explorerTxUrl, stellarConfig } from "@/config/stellar";
 import { humanizeError } from "@/lib/errors";
-import { getRpc } from "@/lib/contract";
+import { getHorizon, getRpc } from "@/lib/contract";
 import { signTxWithFreighter } from "@/lib/wallet";
 import type { TxPhase, TxState } from "@/types";
 
 const { Api } = StellarSdk.rpc;
+
+function isTxSuccess(status: unknown): boolean {
+  return status === "SUCCESS" || status === Api.GetTransactionStatus.SUCCESS;
+}
+
+function isTxFailed(status: unknown): boolean {
+  return status === "FAILED" || status === Api.GetTransactionStatus.FAILED;
+}
+
+function isTxNotFound(status: unknown): boolean {
+  return status === "NOT_FOUND" || status === Api.GetTransactionStatus.NOT_FOUND;
+}
 
 export type TxProgressFn = (state: TxState) => void;
 
@@ -74,41 +86,89 @@ export async function prepareSignAndSend(opts: {
     const hash = send.hash;
     emit("confirming", { hash });
 
-    // Poll until confirmed
-    const maxAttempts = 30;
-    for (let i = 0; i < maxAttempts; i++) {
-      await sleep(1500);
-      try {
-        const txResp = await server.getTransaction(hash);
-        if (txResp.status === Api.GetTransactionStatus.SUCCESS) {
-          emit("confirmed", { hash });
-          persistTx({
-            hash,
-            action: label ?? "contract_call",
-            timestamp: Date.now(),
-            status: "confirmed",
-            sender: sourceAddress,
-          });
-          return {
-            hash,
-            ledger: (txResp as { ledger?: number }).ledger,
-            success: true,
-          };
-        }
-        if (txResp.status === Api.GetTransactionStatus.FAILED) {
-          throw new Error("Transaction failed on-chain during confirmation.");
-        }
-      } catch (e) {
-        if (e instanceof Error && e.message.includes("failed on-chain")) throw e;
-        // not found yet
-      }
-    }
-    throw new Error("Transaction submitted but confirmation timed out. Check Stellar Expert.");
+    const confirmed = await waitUntilConfirmed(server, hash);
+    emit("confirmed", { hash });
+    persistTx({
+      hash,
+      action: label ?? "contract_call",
+      timestamp: Date.now(),
+      status: "confirmed",
+      sender: sourceAddress,
+    });
+    return {
+      hash,
+      ledger: confirmed.ledger,
+      success: true,
+    };
   } catch (e) {
     const error = humanizeError(e);
     emit("failed", { error });
     throw new Error(error);
   }
+}
+
+/**
+ * Wait for Soroban RPC (and Horizon fallback) to show the tx as successful.
+ * String status checks avoid enum interop issues in the browser bundle.
+ */
+async function waitUntilConfirmed(
+  server: ReturnType<typeof getRpc>,
+  hash: string,
+): Promise<{ ledger?: number }> {
+  const maxAttempts = 40;
+  let lastRpcError: unknown;
+
+  for (let i = 0; i < maxAttempts; i++) {
+    if (i > 0) await sleep(1200);
+    try {
+      const txResp = await server.getTransaction(hash);
+      if (isTxSuccess(txResp.status)) {
+        return { ledger: (txResp as { ledger?: number }).ledger };
+      }
+      if (isTxFailed(txResp.status)) {
+        throw new Error("Transaction failed on-chain during confirmation.");
+      }
+      // NOT_FOUND / pending — keep polling
+      if (!isTxNotFound(txResp.status) && txResp.status != null) {
+        // Unknown status: try Horizon before giving up this attempt
+        const fromHorizon = await confirmViaHorizon(hash);
+        if (fromHorizon) return fromHorizon;
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message.includes("failed on-chain")) throw e;
+      lastRpcError = e;
+      const fromHorizon = await confirmViaHorizon(hash);
+      if (fromHorizon) return fromHorizon;
+    }
+  }
+
+  const fromHorizon = await confirmViaHorizon(hash);
+  if (fromHorizon) return fromHorizon;
+
+  const detail =
+    lastRpcError instanceof Error && lastRpcError.message
+      ? ` Last RPC error: ${lastRpcError.message}`
+      : "";
+  throw new Error(
+    `Transaction submitted but confirmation timed out.${detail} Check ${explorerTxUrl(hash)}`,
+  );
+}
+
+async function confirmViaHorizon(hash: string): Promise<{ ledger?: number } | null> {
+  try {
+    const horizon = getHorizon();
+    const tx = await horizon.transactions().transaction(hash).call();
+    if (tx.successful) {
+      return { ledger: typeof tx.ledger === "number" ? tx.ledger : undefined };
+    }
+    if (tx.successful === false) {
+      throw new Error("Transaction failed on-chain during confirmation.");
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("failed on-chain")) throw e;
+    // 404 / not ingested yet
+  }
+  return null;
 }
 
 function sleep(ms: number) {

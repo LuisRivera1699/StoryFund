@@ -29,7 +29,7 @@ describe("utils", () => {
 
 describe("error handling", () => {
   it("explains freighter missing", () => {
-    expect(humanizeError(new Error("Freighter is not installed"))).toMatch(/freighter.app/i);
+    expect(humanizeError(new Error("Freighter is not installed"))).toMatch(/Freighter is not available/i);
   });
 
   it("explains user rejection", () => {

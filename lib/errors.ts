@@ -18,9 +18,10 @@ export function humanizeError(err: unknown): string {
   if (
     msg.includes("freighter is not installed") ||
     msg.includes("freighter not detected") ||
+    msg.includes("not responding") ||
     msg.includes("not installed")
   ) {
-    return "Freighter wallet is not installed. Install it from https://freighter.app and refresh.";
+    return "Freighter is not available. Unlock the extension, open this app in Chrome/Brave/Firefox (extensions do not work in Cursor’s preview), allow the site, and refresh.";
   }
   if (
     msg.includes("user rejected") ||

@@ -22,26 +22,25 @@ export function WalletButton() {
   } = useWallet();
   const mismatch = useNetworkMismatch();
 
-  if (!freighterInstalled) {
-    return (
-      <a
-        href="https://www.freighter.app/"
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex h-10 items-center justify-center rounded-md border border-input bg-white/70 px-4 text-sm font-medium hover:bg-secondary"
-      >
-        Install Freighter
-      </a>
-    );
-  }
-
   if (!connected) {
     return (
       <div className="flex flex-col items-end gap-1">
-        <Button onClick={() => void connect().catch(() => undefined)} disabled={connecting}>
-          <Wallet className="h-4 w-4" />
-          {connecting ? "Connecting…" : "Connect Freighter"}
-        </Button>
+        <div className="flex items-center gap-2">
+          {!freighterInstalled && (
+            <a
+              href="https://www.freighter.app/"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-10 items-center justify-center rounded-md border border-input bg-white/70 px-3 text-sm font-medium hover:bg-secondary"
+            >
+              Install
+            </a>
+          )}
+          <Button onClick={() => void connect().catch(() => undefined)} disabled={connecting}>
+            <Wallet className="h-4 w-4" />
+            {connecting ? "Connecting…" : "Connect Freighter"}
+          </Button>
+        </div>
         {error && <span className="max-w-xs text-right text-xs text-destructive">{error}</span>}
       </div>
     );
