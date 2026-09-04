@@ -1,0 +1,17 @@
+next-env.d.ts
+node_modules
+.next
+out
+dist
+coverage
+.env
+.env.local
+.env*.local
+*.log
+.DS_Store
+contracts/target
+contracts/test_snapshots
+*.wasm
+.vercel
+tsconfig.tsbuildinfo
+tsconfig.tsbuildinfo
